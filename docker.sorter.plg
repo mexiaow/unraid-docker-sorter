@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.6">
+  <!ENTITY version "0.1.7">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.7
+- 修复：保存顺序改为插件后端直接写入 dockerMan user-prefs（不再依赖直接 POST UserPrefs.php）
+- 修复：写入校验按索引排序并过滤 folder-*，避免误判
+- 优化：占位图标使用 data URI，避免任何 404 刷屏
+
 ###0.1.6
 - 增强：在页面显示顺序来源与 user-prefs 路径/时间戳，保存后自动校验是否写入生效
 - 修复：缺省图标与远程图标回退导致的频闪/刷屏（跳过 http(s) 图标，不再依赖 /webGui/images/question.png）
@@ -67,7 +72,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.6）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.7）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -94,7 +99,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.6"
+    build: "0.1.7"
   };
 </script>
 
@@ -609,53 +614,29 @@ Title="Docker Sorter"
   async function doSave() {
     clearMessage();
     const newOrder = getOrderFromGrid();
-    if (!saveEndpoint) {
-      showMessage("缺少保存端点（saveEndpoint）。", "error");
-      return;
-    }
-    const token = await ensureCsrfToken();
-
     try {
       await apiPost("backup", { order: lastSavedOrder });
     } catch (e) {
       showMessage(`备份失败（不影响保存）：${e.message || e}`, "error");
     }
 
-    const names = `${newOrder.join(";")};`;
-    const index = `${newOrder.map((_, i) => String(i)).join(";")};`;
-    const form = new URLSearchParams();
-    form.set("names", names);
-    form.set("index", index);
-    if (token) form.set("csrf_token", token);
-
     showMessage("保存中…", "info");
-    const response = await fetch(saveEndpoint, {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-      body: form.toString(),
-    });
-    const responseText = await response.text();
-    if (!response.ok) {
-      showMessage(`保存失败：HTTP ${response.status}\n${responseText}`, "error");
+    const saveResult = await apiPost("saveOrder", { order: newOrder });
+    if (!saveResult || saveResult.ok !== true) {
+      showMessage(`保存失败：${saveResult?.error || "unknown"}`, "error");
       return;
     }
 
     lastSavedOrder = newOrder;
-    try {
-      const verify = await apiGet("prefsInfo");
-      const same = Array.isArray(verify.order) && verify.order.join("|") === newOrder.join("|");
-      const mtime = verify.mtime ? new Date(verify.mtime * 1000).toLocaleString() : "unknown";
-      setDebug(`user-prefs：${verify.path || "unknown"}\nmtime：${mtime}\n写入校验：${same ? "OK" : "不一致"}`);
-      showMessage(same ? "已保存。刷新 Docker 页即可看到新顺序。" : "已提交保存，但写入校验不一致（见下方调试信息）。", same ? "ok" : "error");
-    } catch (e) {
-      showMessage(`已提交保存，但校验失败：${e.message || e}`, "error");
-    }
+    const verify = saveResult.verify || {};
+    const same = verify.same === true;
+    const mtime = verify.mtime ? new Date(verify.mtime * 1000).toLocaleString() : "unknown";
+    setDebug(`user-prefs：${verify.path || "unknown"}\nmtime：${mtime}\n写入校验：${same ? "OK" : "不一致"}`);
+    showMessage(same ? "已保存。刷新 Docker 页即可看到新顺序。" : "已保存，但写入校验不一致（见下方调试信息）。", same ? "ok" : "error");
   }
 
   async function doRollback() {
     clearMessage();
-    const token = await ensureCsrfToken();
     try {
       const data = await apiGet("latestBackup");
       const order = Array.isArray(data.order) ? data.order : null;
@@ -664,29 +645,20 @@ Title="Docker Sorter"
         return;
       }
 
-      const names = `${order.join(";")};`;
-      const index = `${order.map((_, i) => String(i)).join(";")};`;
-      const form = new URLSearchParams();
-      form.set("names", names);
-      form.set("index", index);
-      if (token) form.set("csrf_token", token);
-
       showMessage("回滚中…", "info");
-      const response = await fetch(saveEndpoint, {
-        method: "POST",
-        credentials: "same-origin",
-        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-        body: form.toString(),
-      });
-      const responseText = await response.text();
-      if (!response.ok) {
-        showMessage(`回滚失败：HTTP ${response.status}\n${responseText}`, "error");
+      const saveResult = await apiPost("saveOrder", { order });
+      if (!saveResult || saveResult.ok !== true) {
+        showMessage(`回滚失败：${saveResult?.error || "unknown"}`, "error");
         return;
       }
 
       lastSavedOrder = order;
       render(order);
-      showMessage("已回滚。刷新 Docker 页即可看到回滚后的顺序。", "ok");
+      const verify = saveResult.verify || {};
+      const same = verify.same === true;
+      const mtime = verify.mtime ? new Date(verify.mtime * 1000).toLocaleString() : "unknown";
+      setDebug(`user-prefs：${verify.path || "unknown"}\nmtime：${mtime}\n写入校验：${same ? "OK" : "不一致"}`);
+      showMessage(same ? "已回滚。刷新 Docker 页即可看到回滚后的顺序。" : "已回滚，但写入校验不一致（见下方调试信息）。", same ? "ok" : "error");
     } catch (e) {
       showMessage(`回滚失败：${e.message || e}`, "error");
     }
@@ -833,22 +805,30 @@ function dockerMan_user_prefs_path(): string {
   return '/boot/config/plugins/dockerMan/userprefs.cfg';
 }
 
-function parse_userprefs_cfg(string $path): array {
+function parse_userprefs_cfg_entries(string $path): array {
   if (!is_file($path)) return [];
   $lines = @file($path, FILE_IGNORE_NEW_LINES);
   if (!is_array($lines)) return [];
-  $values = [];
+  $entries = [];
   foreach ($lines as $line) {
-    if (preg_match('/^\s*\d+\s*=\s*"([^"]*)"/', $line, $m) !== 1) continue;
-    $values[] = $m[1];
+    if (preg_match('/^\s*(\d+)\s*=\s*"([^"]*)"/', $line, $m) !== 1) continue;
+    $entries[] = ['idx' => (int)$m[1], 'name' => (string)$m[2]];
   }
-  return $values;
+  return $entries;
+}
+
+function userprefs_order_sorted(string $path): array {
+  $entries = parse_userprefs_cfg_entries($path);
+  usort($entries, fn($a, $b) => ($a['idx'] <=> $b['idx']));
+  $out = [];
+  foreach ($entries as $e) $out[] = $e['name'];
+  return $out;
 }
 
 function order_from_dockerMan_user_prefs(array $containerNames): array {
   $set = array_fill_keys($containerNames, true);
   $path = dockerMan_user_prefs_path();
-  $raw = parse_userprefs_cfg($path);
+  $raw = userprefs_order_sorted($path);
 
   $order = [];
   foreach ($raw as $name) {
@@ -941,14 +921,98 @@ if ($action === 'csrf') {
 
 if ($action === 'prefsInfo') {
   $path = dockerMan_user_prefs_path();
-  $order = parse_userprefs_cfg($path);
+  $raw = userprefs_order_sorted($path);
+  $filtered = [];
+  foreach ($raw as $name) {
+    if ($name === '') continue;
+    if (str_starts_with($name, 'folder-')) continue;
+    $filtered[] = $name;
+  }
   json_out([
     'ok' => true,
     'path' => $path,
     'exists' => is_file($path),
     'mtime' => is_file($path) ? @filemtime($path) : null,
     'size' => is_file($path) ? @filesize($path) : null,
-    'order' => $order,
+    'order' => $filtered,
+    'orderRaw' => $raw,
+  ]);
+}
+
+if ($action === 'saveOrder') {
+  $body = read_json_body();
+  $order = $body['order'] ?? null;
+  if (!is_array($order)) json_out(['ok' => false, 'error' => 'invalid_order'], 400);
+
+  $containerNames = docker_container_names();
+  $set = array_fill_keys($containerNames, true);
+
+  $seen = [];
+  $saveLines = [];
+  $i = 0;
+  $normalized = [];
+  foreach ($order as $name) {
+    $name = (string)$name;
+    if ($name === '' || str_starts_with($name, 'folder-')) continue;
+    if (!isset($set[$name])) continue;
+    if (isset($seen[$name])) continue;
+    $seen[$name] = true;
+    $normalized[] = $name;
+    $saveLines[] = $i . "=\"" . $name . "\"";
+    $i++;
+  }
+  foreach ($containerNames as $name) {
+    if (isset($seen[$name])) continue;
+    $seen[$name] = true;
+    $normalized[] = $name;
+    $saveLines[] = $i . "=\"" . $name . "\"";
+    $i++;
+  }
+
+  $path = dockerMan_user_prefs_path();
+  $dir = dirname($path);
+  if (!is_dir($dir)) @mkdir($dir, 0777, true);
+  $payload = implode("\n", $saveLines) . "\n";
+  $ok = @file_put_contents($path, $payload);
+  if ($ok === false) json_out(['ok' => false, 'error' => 'write_failed', 'path' => $path], 500);
+
+  // keep autostart order in sync (same as UserPrefs.php)
+  $paths = dockerMan_paths();
+  $autostart = $paths['autostart-file'] ?? '';
+  if (is_string($autostart) && $autostart !== '' && file_exists($autostart)) {
+    $nameToIdx = [];
+    foreach ($saveLines as $line) {
+      if (preg_match('/^(\d+)="([^"]+)"$/', $line, $m) === 1) {
+        $nameToIdx[$m[2]] = (int)$m[1];
+      }
+    }
+    $allAutoStart = file($autostart, FILE_IGNORE_NEW_LINES);
+    if (is_array($allAutoStart)) {
+      $sort = [];
+      foreach ($allAutoStart as $ct) {
+        $ctName = explode(' ', $ct)[0];
+        $sort[] = $nameToIdx[$ctName] ?? 999;
+      }
+      array_multisort($sort, SORT_NUMERIC, $allAutoStart);
+      @file_put_contents($autostart, implode(PHP_EOL, $allAutoStart) . PHP_EOL);
+    }
+  }
+
+  $raw = userprefs_order_sorted($path);
+  $filtered = [];
+  foreach ($raw as $name) {
+    if ($name === '' || str_starts_with($name, 'folder-')) continue;
+    $filtered[] = $name;
+  }
+  $same = implode('|', $filtered) === implode('|', $normalized);
+
+  json_out([
+    'ok' => true,
+    'verify' => [
+      'path' => $path,
+      'mtime' => @filemtime($path),
+      'same' => $same,
+    ],
   ]);
 }
 

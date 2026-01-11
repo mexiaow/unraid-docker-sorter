@@ -29,7 +29,7 @@
 
 ## 说明
 
-- 保存顺序使用 Unraid DockerMan 的官方接口：`/plugins/dynamix.docker.manager/include/UserPrefs.php`
+- 保存顺序由插件后端直接写入 DockerMan 的 `user-prefs` 文件（与 Docker 页拖拽保存写入同一位置），并同步调整 Docker autostart 顺序
 - 拖拽使用 `SortableJS`（从 `cdn.jsdelivr.net` 加载）
 - 网格列数默认 6（可调 5–7）；顺序按“行优先：从左到右、从上到下”
 - 卡片显示：图标 + 名称 + 运行状态（绿=运行，红=停止）
