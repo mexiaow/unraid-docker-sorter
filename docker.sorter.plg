@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.5">
+  <!ENTITY version "0.1.6">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.6
+- 增强：在页面显示顺序来源与 user-prefs 路径/时间戳，保存后自动校验是否写入生效
+- 修复：缺省图标与远程图标回退导致的频闪/刷屏（跳过 http(s) 图标，不再依赖 /webGui/images/question.png）
+
 ###0.1.5
 - 修复：api.php 发生 PHP 致命错误时仍返回 JSON（避免前端出现 “Unexpected end of JSON input”）
 
@@ -63,8 +67,8 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面</div>
-    </div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.6）</div>
+      </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
         <span>每行列数</span>
@@ -79,6 +83,7 @@ Title="Docker Sorter"
   </div>
 
   <div id="ds-message" class="ds-message" style="display:none;"></div>
+  <div id="ds-debug" class="ds-message ds-debug" style="display:none;"></div>
 
   <div id="ds-grid" class="ds-grid" style="--ds-cols: 6;"></div>
 </div>
@@ -88,7 +93,8 @@ Title="Docker Sorter"
     apiBase: "/plugins/docker.sorter/include/api.php",
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
-    reportConfigUrl: "/webGui/include/Report.php?cmd=config"
+    reportConfigUrl: "/webGui/include/Report.php?cmd=config",
+    build: "0.1.6"
   };
 </script>
 
@@ -221,6 +227,12 @@ Title="Docker Sorter"
   margin: 8px 0 12px;
 }
 
+.ds-debug {
+  white-space: pre-wrap;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
 .ds-grid {
   --ds-cols: 6;
   display: grid;
@@ -321,10 +333,15 @@ Title="Docker Sorter"
   const saveEndpoint = window.DockerSorter?.saveEndpoint;
   let csrfToken = window.DockerSorter?.csrfToken || "";
   const reportConfigUrl = window.DockerSorter?.reportConfigUrl;
-  const placeholderIcon = "/plugins/docker.sorter/images/placeholder.svg";
+  const placeholderIcon =
+    "data:image/svg+xml;utf8," +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#334155"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs><rect x="6" y="6" width="52" height="52" rx="14" fill="url(#p)"/><path d="M22 26a10 10 0 0 1 20 0c0 7-8 7-8 12" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="46" r="3" fill="#94a3b8"/></svg>'
+    );
 
   const gridEl = document.getElementById("ds-grid");
   const messageEl = document.getElementById("ds-message");
+  const debugEl = document.getElementById("ds-debug");
   const columnsEl = document.getElementById("ds-columns");
   const columnsValueEl = document.getElementById("ds-columns-value");
   const searchEl = document.getElementById("ds-search");
@@ -351,6 +368,17 @@ Title="Docker Sorter"
   function clearMessage() {
     messageEl.style.display = "none";
     messageEl.textContent = "";
+  }
+
+  function setDebug(text) {
+    if (!debugEl) return;
+    if (!text) {
+      debugEl.style.display = "none";
+      debugEl.textContent = "";
+      return;
+    }
+    debugEl.style.display = "block";
+    debugEl.textContent = text;
   }
 
   function clampColumns(value) {
@@ -555,12 +583,18 @@ Title="Docker Sorter"
 
   async function loadState() {
     clearMessage();
+    setDebug("");
     showMessage("加载中…", "info");
     const state = await apiGet("state");
     containersByName = new Map(state.containers.map((c) => [c.name, c]));
     lastSavedOrder = Array.isArray(state.order) ? state.order : [];
     applyColumns(state.settings?.columns ?? 6);
     render(lastSavedOrder);
+    const meta = state.meta || {};
+    if (meta.userPrefsPath) {
+      const mtime = meta.userPrefsMtime ? new Date(meta.userPrefsMtime * 1000).toLocaleString() : "unknown";
+      setDebug(`顺序来源：${meta.orderSource || "unknown"}\nuser-prefs：${meta.userPrefsPath}\nmtime：${mtime}`);
+    }
     showMessage("已加载。拖拽后点击“保存到 Docker 页”。", "ok");
   }
 
@@ -608,7 +642,15 @@ Title="Docker Sorter"
     }
 
     lastSavedOrder = newOrder;
-    showMessage("已保存。刷新 Docker 页即可看到新顺序。", "ok");
+    try {
+      const verify = await apiGet("prefsInfo");
+      const same = Array.isArray(verify.order) && verify.order.join("|") === newOrder.join("|");
+      const mtime = verify.mtime ? new Date(verify.mtime * 1000).toLocaleString() : "unknown";
+      setDebug(`user-prefs：${verify.path || "unknown"}\nmtime：${mtime}\n写入校验：${same ? "OK" : "不一致"}`);
+      showMessage(same ? "已保存。刷新 Docker 页即可看到新顺序。" : "已提交保存，但写入校验不一致（见下方调试信息）。", same ? "ok" : "error");
+    } catch (e) {
+      showMessage(`已提交保存，但校验失败：${e.message || e}`, "error");
+    }
   }
 
   async function doRollback() {
@@ -764,6 +806,7 @@ function template_icon_map(): array {
 function normalize_icon_url(string $icon): string {
   $icon = trim($icon);
   if ($icon === '') return '';
+  if (preg_match('#^https?://#i', $icon)) return '';
   if (str_starts_with($icon, 'file://')) $icon = substr($icon, 7);
 
   $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/state/plugins/dynamix.docker.manager/images/', $icon);
@@ -896,11 +939,25 @@ if ($action === 'csrf') {
   ]);
 }
 
+if ($action === 'prefsInfo') {
+  $path = dockerMan_user_prefs_path();
+  $order = parse_userprefs_cfg($path);
+  json_out([
+    'ok' => true,
+    'path' => $path,
+    'exists' => is_file($path),
+    'mtime' => is_file($path) ? @filemtime($path) : null,
+    'size' => is_file($path) ? @filesize($path) : null,
+    'order' => $order,
+  ]);
+}
+
 if ($action === 'state') {
   $containerNames = docker_container_names();
   $running = docker_running_set();
   $icons = template_icon_map();
   $ts = time();
+  $userPrefsPath = dockerMan_user_prefs_path();
 
   $containers = [];
   foreach ($containerNames as $name) {
@@ -908,7 +965,7 @@ if ($action === 'state') {
     $containers[] = [
       'name' => $name,
       'running' => isset($running[$name]),
-      'iconPrimary' => '/state/plugins/dynamix.docker.manager/images/' . rawurlencode($name) . '-icon.png?' . $ts,
+      'iconPrimary' => '/state/plugins/dynamix.docker.manager/images/' . rawurlencode($name) . '-icon.png',
       'iconFallback' => normalize_icon_url($icon),
     ];
   }
@@ -919,6 +976,11 @@ if ($action === 'state') {
     'containers' => $containers,
     'order' => $order,
     'settings' => $settings,
+    'meta' => [
+      'orderSource' => 'dockerMan user-prefs',
+      'userPrefsPath' => $userPrefsPath,
+      'userPrefsMtime' => is_file($userPrefsPath) ? @filemtime($userPrefsPath) : null,
+    ],
   ]);
 }
 
