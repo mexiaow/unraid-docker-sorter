@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.1">
+  <!ENTITY version "0.1.2">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.2
+- 修复：csrf_token 获取更稳（cookie / api / Report.php 多重回退）
+- 修复：缺省图标不再 404 闪烁刷屏（改用插件内置占位图标）
+
 ###0.1.1
 - 修复：自动获取 csrf_token（含 Report.php 回退）
 - 修复：按 DockerMan 实际顺序初始化（过滤 folder-*）
@@ -27,6 +31,7 @@
 <FILE Run="/bin/bash">
 <INLINE>
 mkdir -p "&plugin;/backups"
+mkdir -p "&emhttp;/images" "&emhttp;/css" "&emhttp;/js" "&emhttp;/include"
 </INLINE>
 </FILE>
 
@@ -98,6 +103,22 @@ Title="Docker Sorter"
   </g>
   <circle cx="50" cy="16" r="4" fill="#22c55e"/>
   <path d="M13 48h38" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+</svg>
+]]></INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/images/placeholder.svg" Mode="0644">
+<INLINE><![CDATA[
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#334155"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#p)"/>
+  <path d="M22 26a10 10 0 0 1 20 0c0 7-8 7-8 12" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="32" cy="46" r="3" fill="#94a3b8"/>
 </svg>
 ]]></INLINE>
 </FILE>
@@ -287,6 +308,7 @@ Title="Docker Sorter"
   const saveEndpoint = window.DockerSorter?.saveEndpoint;
   let csrfToken = window.DockerSorter?.csrfToken || "";
   const reportConfigUrl = window.DockerSorter?.reportConfigUrl;
+  const placeholderIcon = "/plugins/docker.sorter/images/placeholder.svg";
 
   const gridEl = document.getElementById("ds-grid");
   const messageEl = document.getElementById("ds-message");
@@ -347,6 +369,12 @@ Title="Docker Sorter"
   async function ensureCsrfToken() {
     if (csrfToken) return csrfToken;
 
+    const cookieMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/i);
+    if (cookieMatch && cookieMatch[1]) {
+      csrfToken = decodeURIComponent(cookieMatch[1]).toUpperCase();
+      return csrfToken;
+    }
+
     try {
       const data = await apiGet("csrf");
       if (data && typeof data.csrf_token === "string" && data.csrf_token) {
@@ -360,10 +388,17 @@ Title="Docker Sorter"
     if (reportConfigUrl) {
       const response = await fetch(reportConfigUrl, { credentials: "same-origin" });
       const text = await response.text();
-      const m = text.match(/csrf_token=([0-9A-F]+)/i);
-      if (m && m[1]) {
-        csrfToken = m[1].toUpperCase();
-        return csrfToken;
+      const candidates = [
+        /csrf_token=([0-9A-F]+)/i,
+        /"csrf_token"\s*:\s*"([0-9A-F]+)"/i,
+        /csrf_token&amp;#x3D;([0-9A-F]+)/i,
+      ];
+      for (const rx of candidates) {
+        const m = text.match(rx);
+        if (m && m[1]) {
+          csrfToken = m[1].toUpperCase();
+          return csrfToken;
+        }
       }
     }
 
@@ -389,15 +424,20 @@ Title="Docker Sorter"
     imgEl.loading = "lazy";
     imgEl.decoding = "async";
     const fallbackIcon = container.iconFallback || container.icon || "";
-    const primaryIcon = container.iconPrimary || fallbackIcon || "/webGui/images/question.png";
-    imgEl.src = primaryIcon;
-    imgEl.addEventListener("error", () => {
+    const primaryIcon = container.iconPrimary || fallbackIcon || placeholderIcon;
+    imgEl.src = primaryIcon || placeholderIcon;
+    function onImgError() {
       if (fallbackIcon && imgEl.src !== fallbackIcon) {
         imgEl.src = fallbackIcon;
         return;
       }
-      imgEl.src = "/webGui/images/question.png";
-    });
+      if (imgEl.src !== placeholderIcon) {
+        imgEl.src = placeholderIcon;
+        return;
+      }
+      imgEl.removeEventListener("error", onImgError);
+    }
+    imgEl.addEventListener("error", onImgError);
     iconEl.appendChild(imgEl);
 
     const nameEl = document.createElement("div");
@@ -744,6 +784,8 @@ function order_from_dockerMan_user_prefs(array $containerNames): array {
 }
 
 function csrf_token_value(): string {
+  $t = $GLOBALS['csrf_token'] ?? '';
+  if (is_string($t) && $t !== '') return $t;
   $t = $_SESSION['csrf_token'] ?? '';
   if (is_string($t) && $t !== '') return $t;
   $t = $_COOKIE['csrf_token'] ?? '';

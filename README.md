@@ -18,7 +18,7 @@
 
 - 拖拽不可用：本页依赖 `cdn.jsdelivr.net` 加载 `SortableJS`，请确认 Unraid 能访问外网或更换可用的 CDN
 - 提示缺少 `csrf_token`：确认已登录 WebGUI；本插件会尝试从 `/webGui/include/Report.php?cmd=config` 自动获取 token，仍失败时请强制刷新页面后重试
-- 图标不显示：优先读取 Unraid Docker 模板里的 `Icon` 字段，取不到会回落到默认图标
+- 图标不显示：优先尝试 `/state/plugins/dynamix.docker.manager/images/NAME-icon.png`，取不到会回退模板 `Icon`，最终回退到插件内置占位图标（避免 404 刷屏）
 
 ## 卸载
 
