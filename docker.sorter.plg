@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/refs/heads/main/&name;.plg">
-  <!ENTITY version "0.1.10">
+  <!ENTITY version "0.1.11">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,9 +14,12 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.11
+- 修复：插件 XML 解析失败导致“安装后页面消失”（`CHANGES` 里误写了 `&lt;name&gt;` 触发 XML 标签解析）
+
 ###0.1.10
 - 修复：`saveOrder` 在 `json_encode` 失败时不再返回空响应（输出明确错误 JSON）
-- 修复：图标优先复用 DockerMan 缓存的 `/state/.../<name>-icon.*`（仅在缓存不存在时才回退到问号图标，避免 404 刷屏）
+- 修复：图标优先复用 DockerMan 缓存的 `/state/.../NAME-icon.*`（仅在缓存不存在时才回退到问号图标，避免 404 刷屏）
 
 ###0.1.9
 - 修复：图标回退与 Docker 页一致（无图标直接用 /plugins/dynamix.docker.manager/images/question.png）
@@ -83,7 +86,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.10）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.11）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -110,7 +113,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.10"
+    build: "0.1.11"
   };
 </script>
 
