@@ -5,8 +5,8 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.17">
-  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg?version=&version;">
+  <!ENTITY version "0.1.18">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,11 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.18
+- 优化：顶部布局（搜索左侧，列数+按钮右侧同一行）
+- 增强：列数范围改为 6~15，默认 8
+- 调整：`pluginURL` 改回旧格式（不带版本参数）
+
 ###0.1.17
 - 优化：顶部工具栏重新布局（列数/搜索/按钮更紧凑，调试信息可折叠）
 
@@ -106,17 +111,20 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.17）</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.18）</div>
     </div>
-    <div class="ds-toolbar-right">
-      <div class="ds-controls">
-        <label class="ds-label">
-          <span>每行列数</span>
-          <input id="ds-columns" type="range" min="5" max="7" step="1" value="6" />
-          <span id="ds-columns-value" class="ds-mono">6</span>
-        </label>
-        <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
-      </div>
+  </div>
+
+  <div class="ds-toprow">
+    <div class="ds-toprow-left">
+      <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
+    </div>
+    <div class="ds-toprow-right">
+      <label class="ds-label">
+        <span>每行列数</span>
+        <input id="ds-columns" type="range" min="6" max="15" step="1" value="8" />
+        <span id="ds-columns-value" class="ds-mono">8</span>
+      </label>
       <div class="ds-actions">
         <button id="ds-reload" class="ds-btn">刷新</button>
         <button id="ds-rollback" class="ds-btn ds-btn-secondary">回滚上次</button>
@@ -140,7 +148,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.17"
+    build: "0.1.18"
   };
 </script>
 
@@ -210,17 +218,31 @@ Title="Docker Sorter"
   justify-content: flex-end;
 }
 
-.ds-controls {
+.ds-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
 }
 
-.ds-actions {
+.ds-toprow {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.ds-toprow-left {
+  flex: 1 1 320px;
+  min-width: 260px;
+}
+
+.ds-toprow-right {
+  display: flex;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
@@ -307,7 +329,7 @@ Title="Docker Sorter"
 .ds-grid {
   --ds-cols: 6;
   display: grid;
-  grid-template-columns: repeat(var(--ds-cols), minmax(130px, 1fr));
+  grid-template-columns: repeat(var(--ds-cols), minmax(110px, 1fr));
   gap: 10px;
 }
 
@@ -420,7 +442,7 @@ Title="Docker Sorter"
 
   let containersByName = new Map();
   let lastSavedOrder = [];
-  let currentColumns = 6;
+  let currentColumns = 8;
   let sortable = null;
 
   function showMessage(text, type) {
@@ -456,8 +478,8 @@ Title="Docker Sorter"
 
   function clampColumns(value) {
     const numberValue = Number(value);
-    if (!Number.isFinite(numberValue)) return 6;
-    return Math.min(7, Math.max(5, numberValue));
+    if (!Number.isFinite(numberValue)) return 8;
+    return Math.min(15, Math.max(6, numberValue));
   }
 
   async function apiGet(action) {
@@ -1036,13 +1058,13 @@ function settings_path(): string {
 
 function load_settings(): array {
   $path = settings_path();
-  if (!is_file($path)) return ['columns' => 6];
+  if (!is_file($path)) return ['columns' => 8];
   $raw = @file_get_contents($path);
-  if ($raw === false) return ['columns' => 6];
+  if ($raw === false) return ['columns' => 8];
   $decoded = json_decode($raw, true);
-  if (!is_array($decoded)) return ['columns' => 6];
-  $columns = isset($decoded['columns']) ? (int)$decoded['columns'] : 6;
-  $columns = max(5, min(7, $columns));
+  if (!is_array($decoded)) return ['columns' => 8];
+  $columns = isset($decoded['columns']) ? (int)$decoded['columns'] : 8;
+  $columns = max(6, min(15, $columns));
   return ['columns' => $columns];
 }
 
@@ -1228,8 +1250,8 @@ if ($action === 'state') {
 
 if ($action === 'settings') {
   $body = read_request_body();
-  $columns = isset($body['columns']) ? (int)$body['columns'] : 6;
-  $columns = max(5, min(7, $columns));
+  $columns = isset($body['columns']) ? (int)$body['columns'] : 8;
+  $columns = max(6, min(15, $columns));
   $ok = save_settings(['columns' => $columns]);
   if (!$ok) json_out(['ok' => false, 'error' => 'save_failed'], 500);
   json_out(['ok' => true, 'columns' => $columns]);
