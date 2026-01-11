@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/refs/heads/main/&name;.plg">
-  <!ENTITY version "0.1.11">
+  <!ENTITY version "0.1.12">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.12
+- 修复：Unraid webGUI 对 POST 强制 CSRF，`backup/saveOrder` 现在会自动携带 `csrf_token`（避免空响应与日志报错）
+
 ###0.1.11
 - 修复：插件 XML 解析失败导致“安装后页面消失”（`CHANGES` 里误写了 `&lt;name&gt;` 触发 XML 标签解析）
 
@@ -86,7 +89,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.11）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.12）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -113,7 +116,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.11"
+    build: "0.1.12"
   };
 </script>
 
@@ -402,11 +405,14 @@ Title="Docker Sorter"
   }
 
   async function apiPost(action, payload) {
-    const response = await fetch(`${apiBase}?action=${encodeURIComponent(action)}`, {
+    const token = await ensureCsrfToken();
+    if (!token) throw new Error("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。");
+    const url = `${apiBase}?action=${encodeURIComponent(action)}&csrf_token=${encodeURIComponent(token)}`;
+    const response = await fetch(url, {
       method: "POST",
       credentials: "same-origin",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(payload || {}),
+      body: JSON.stringify({ ...(payload || {}), csrf_token: token }),
     });
     const text = await response.text();
     if (!response.ok) throw new Error(text || `HTTP ${response.status}`);

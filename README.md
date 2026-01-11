@@ -23,7 +23,7 @@
 ## 故障排查
 
 - 拖拽不可用：本页依赖 `cdn.jsdelivr.net` 加载 `SortableJS`，请确认 Unraid 能访问外网或更换可用的 CDN
-- 提示缺少 `csrf_token`：当前版本保存/回滚不再强制依赖 token；若仍提示，通常是浏览器缓存了旧版 JS，请强制刷新（Ctrl+F5）
+- 提示缺少 `csrf_token`：Unraid webGUI 对写操作会强制 CSRF；请确认已登录，然后强制刷新（Ctrl+F5），仍不行就重开浏览器或清理该站点缓存
 - 备份失败但仍可保存：备份为“尽力而为”，不影响顺序保存；请把报错信息里的响应内容贴出来以便定位
 - 图标不显示：优先使用模板 `Icon`；没有设置图标则直接使用 DockerMan 默认 `question.png`（`/plugins/dynamix.docker.manager/images/question.png`），避免大量 404 刷屏
 - 保存显示成功但 Docker 页不变：打开排序器页面下方的调试信息，确认 `user-prefs` 路径与 `mtime` 是否变化；也可访问 `.../plugins/docker.sorter/include/api.php?action=prefsInfo` 查看写入后的实际内容
