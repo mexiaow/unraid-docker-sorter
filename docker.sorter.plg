@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.7">
+  <!ENTITY version "0.1.9">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,13 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.9
+- 修复：图标回退与 Docker 页一致（无图标直接用 /plugins/dynamix.docker.manager/images/question.png）
+- 修复：不再尝试 NAME-icon.png，避免大量 404 导致频闪与刷屏
+
+###0.1.8
+- 修复：saveOrder 返回空响应时给出明确错误（并在后端致命错误时强制返回 JSON）
+
 ###0.1.7
 - 修复：保存顺序改为插件后端直接写入 dockerMan user-prefs（不再依赖直接 POST UserPrefs.php）
 - 修复：写入校验按索引排序并过滤 folder-*，避免误判
@@ -72,7 +79,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.7）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.9）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -99,7 +106,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.7"
+    build: "0.1.9"
   };
 </script>
 
@@ -127,22 +134,6 @@ Title="Docker Sorter"
   </g>
   <circle cx="50" cy="16" r="4" fill="#22c55e"/>
   <path d="M13 48h38" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
-</svg>
-]]></INLINE>
-</FILE>
-
-<FILE Name="&emhttp;/images/placeholder.svg" Mode="0644">
-<INLINE><![CDATA[
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <defs>
-    <linearGradient id="p" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#334155"/>
-      <stop offset="1" stop-color="#0f172a"/>
-    </linearGradient>
-  </defs>
-  <rect x="6" y="6" width="52" height="52" rx="14" fill="url(#p)"/>
-  <path d="M22 26a10 10 0 0 1 20 0c0 7-8 7-8 12" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/>
-  <circle cx="32" cy="46" r="3" fill="#94a3b8"/>
 </svg>
 ]]></INLINE>
 </FILE>
@@ -338,11 +329,7 @@ Title="Docker Sorter"
   const saveEndpoint = window.DockerSorter?.saveEndpoint;
   let csrfToken = window.DockerSorter?.csrfToken || "";
   const reportConfigUrl = window.DockerSorter?.reportConfigUrl;
-  const placeholderIcon =
-    "data:image/svg+xml;utf8," +
-    encodeURIComponent(
-      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><defs><linearGradient id="p" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#334155"/><stop offset="1" stop-color="#0f172a"/></linearGradient></defs><rect x="6" y="6" width="52" height="52" rx="14" fill="url(#p)"/><path d="M22 26a10 10 0 0 1 20 0c0 7-8 7-8 12" fill="none" stroke="#94a3b8" stroke-width="4" stroke-linecap="round"/><circle cx="32" cy="46" r="3" fill="#94a3b8"/></svg>'
-    );
+  const placeholderIcon = "/plugins/dynamix.docker.manager/images/question.png";
 
   const gridEl = document.getElementById("ds-grid");
   const messageEl = document.getElementById("ds-message");
@@ -399,7 +386,7 @@ Title="Docker Sorter"
     });
     const text = await response.text();
     if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
-    if (!text) return {};
+    if (!text) throw new Error(`API 返回空响应：${action}`);
     try {
       return JSON.parse(text);
     } catch (e) {
@@ -416,7 +403,7 @@ Title="Docker Sorter"
     });
     const text = await response.text();
     if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
-    if (!text) return {};
+    if (!text) throw new Error(`API 返回空响应：${action}`);
     try {
       return JSON.parse(text);
     } catch (e) {
@@ -481,21 +468,15 @@ Title="Docker Sorter"
     imgEl.alt = container.name;
     imgEl.loading = "lazy";
     imgEl.decoding = "async";
-    const fallbackIcon = container.iconFallback || container.icon || "";
-    const primaryIcon = container.iconPrimary || fallbackIcon || placeholderIcon;
-    imgEl.src = primaryIcon || placeholderIcon;
-    function onImgError() {
-      if (fallbackIcon && imgEl.src !== fallbackIcon) {
-        imgEl.src = fallbackIcon;
-        return;
-      }
-      if (imgEl.src !== placeholderIcon) {
-        imgEl.src = placeholderIcon;
-        return;
-      }
-      imgEl.removeEventListener("error", onImgError);
-    }
-    imgEl.addEventListener("error", onImgError);
+    imgEl.src = container.icon || placeholderIcon;
+    imgEl.addEventListener(
+      "error",
+      () => {
+        if (imgEl.src !== placeholderIcon) imgEl.src = placeholderIcon;
+        imgEl.onerror = null;
+      },
+      { once: true }
+    );
     iconEl.appendChild(imgEl);
 
     const nameEl = document.createElement("div");
@@ -621,7 +602,13 @@ Title="Docker Sorter"
     }
 
     showMessage("保存中…", "info");
-    const saveResult = await apiPost("saveOrder", { order: newOrder });
+    let saveResult;
+    try {
+      saveResult = await apiPost("saveOrder", { order: newOrder });
+    } catch (e) {
+      showMessage(`保存失败：${e.message || e}`, "error");
+      return;
+    }
     if (!saveResult || saveResult.ok !== true) {
       showMessage(`保存失败：${saveResult?.error || "unknown"}`, "error");
       return;
@@ -697,6 +684,7 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 @session_start();
+@ob_start();
 
 ini_set('display_errors', '0');
 error_reporting(E_ALL);
@@ -706,7 +694,7 @@ function fatal_json_shutdown(): void {
   if (!$err) return;
   $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
   if (!in_array($err['type'], $fatalTypes, true)) return;
-  if (headers_sent()) return;
+  while (ob_get_level() > 0) { @ob_end_clean(); }
   http_response_code(500);
   header('Content-Type: application/json; charset=utf-8');
   echo json_encode([
@@ -779,10 +767,11 @@ function normalize_icon_url(string $icon): string {
   $icon = trim($icon);
   if ($icon === '') return '';
   if (preg_match('#^https?://#i', $icon)) return '';
+  if (str_starts_with($icon, '/plugins/') || str_starts_with($icon, '/state/')) return $icon;
   if (str_starts_with($icon, 'file://')) $icon = substr($icon, 7);
 
-  $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/state/plugins/dynamix.docker.manager/images/', $icon);
-  $icon = str_replace('/usr/local/emhttp/plugins/dynamix.docker.manager/images/', '/state/plugins/dynamix.docker.manager/images/', $icon);
+  $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/plugins/dynamix.docker.manager/images/', $icon);
+  $icon = str_replace('/usr/local/emhttp/plugins/dynamix.docker.manager/images/', '/plugins/dynamix.docker.manager/images/', $icon);
 
   return $icon;
 }
@@ -1020,17 +1009,17 @@ if ($action === 'state') {
   $containerNames = docker_container_names();
   $running = docker_running_set();
   $icons = template_icon_map();
-  $ts = time();
   $userPrefsPath = dockerMan_user_prefs_path();
+  $defaultIcon = '/plugins/dynamix.docker.manager/images/question.png';
 
   $containers = [];
   foreach ($containerNames as $name) {
     $icon = $icons[$name] ?? '';
+    $normalizedIcon = normalize_icon_url($icon);
     $containers[] = [
       'name' => $name,
       'running' => isset($running[$name]),
-      'iconPrimary' => '/state/plugins/dynamix.docker.manager/images/' . rawurlencode($name) . '-icon.png',
-      'iconFallback' => normalize_icon_url($icon),
+      'icon' => $normalizedIcon !== '' ? $normalizedIcon : $defaultIcon,
     ];
   }
 
