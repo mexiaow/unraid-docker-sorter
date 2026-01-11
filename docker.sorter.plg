@@ -1,0 +1,822 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "docker.sorter">
+  <!ENTITY author    "unraid-docker-sorter">
+  <!ENTITY version   "0.1.0">
+  <!ENTITY launch    "Tools/Docker Sorter">
+  <!ENTITY plugin    "/boot/config/plugins/&name;">
+  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" min="7.2.3" icon="sort-amount-down">
+
+<CHANGES>
+###0.1.0
+- 初版：网格拖拽排序 + 保存到 Docker 页顺序（复用 UserPrefs.php）
+</CHANGES>
+
+<!-- Post-install: create persistent config dirs -->
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir -p "&plugin;/backups"
+</INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/DockerSorter.page" Mode="0644">
+<INLINE><![CDATA[
+Icon="docker-sorter.svg"
+Menu="Tools"
+Title="Docker Sorter"
+---
+<?php
+  $token = $csrf_token ?? ($_SESSION['csrf_token'] ?? '');
+?>
+<link rel="stylesheet" href="/plugins/docker.sorter/css/docker-sorter.css">
+
+<div id="docker-sorter-root" class="ds-root">
+  <div class="ds-toolbar">
+    <div class="ds-toolbar-left">
+      <div class="ds-title">Docker Sorter</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面</div>
+    </div>
+    <div class="ds-toolbar-right">
+      <label class="ds-label">
+        <span>每行列数</span>
+        <input id="ds-columns" type="range" min="5" max="7" step="1" value="6" />
+        <span id="ds-columns-value" class="ds-mono">6</span>
+      </label>
+      <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
+      <button id="ds-reload" class="ds-btn">刷新</button>
+      <button id="ds-rollback" class="ds-btn ds-btn-secondary">回滚上次</button>
+      <button id="ds-save" class="ds-btn ds-btn-primary">保存到 Docker 页</button>
+    </div>
+  </div>
+
+  <div id="ds-message" class="ds-message" style="display:none;"></div>
+
+  <div id="ds-grid" class="ds-grid" style="--ds-cols: 6;"></div>
+</div>
+
+<script>
+  window.DockerSorter = {
+    apiBase: "/plugins/docker.sorter/include/api.php",
+    saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
+    csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>"
+  };
+</script>
+
+<!-- SortableJS: CDN 加载（触屏/网格拖拽体验更好）。 -->
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+<script src="/plugins/docker.sorter/js/docker-sorter.js"></script>
+]]></INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/docker-sorter.svg" Mode="0644">
+<INLINE><![CDATA[
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#4f8cff"/>
+      <stop offset="1" stop-color="#00d084"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="10" width="52" height="44" rx="10" fill="#1f2937"/>
+  <g fill="url(#g)">
+    <rect x="16" y="20" width="14" height="10" rx="3"/>
+    <rect x="34" y="20" width="14" height="10" rx="3"/>
+    <rect x="16" y="34" width="14" height="10" rx="3"/>
+    <rect x="34" y="34" width="14" height="10" rx="3"/>
+  </g>
+  <circle cx="50" cy="16" r="4" fill="#22c55e"/>
+  <path d="M13 48h38" stroke="#94a3b8" stroke-width="3" stroke-linecap="round"/>
+</svg>
+]]></INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/css/docker-sorter.css" Mode="0644">
+<INLINE><![CDATA[
+.ds-root {
+  padding: 14px 10px 10px;
+}
+
+.ds-toolbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.ds-toolbar-left {
+  min-width: 260px;
+}
+
+.ds-title {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ds-subtitle {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.ds-toolbar-right {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.ds-label {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 10px;
+}
+
+.ds-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.ds-search {
+  min-width: 220px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.25);
+}
+
+.ds-btn {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.25);
+  cursor: pointer;
+}
+
+.ds-btn:hover {
+  background: rgba(15, 23, 42, 0.4);
+}
+
+.ds-btn-primary {
+  border-color: rgba(34, 197, 94, 0.55);
+}
+
+.ds-btn-secondary {
+  border-color: rgba(59, 130, 246, 0.55);
+}
+
+.ds-message {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.25);
+  margin: 8px 0 12px;
+}
+
+.ds-grid {
+  --ds-cols: 6;
+  display: grid;
+  grid-template-columns: repeat(var(--ds-cols), minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.ds-card {
+  user-select: none;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(2, 6, 23, 0.35);
+  padding: 10px 10px 8px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 10px;
+  row-gap: 4px;
+}
+
+.ds-card-wrap.ds-dim .ds-card {
+  opacity: 0.25;
+}
+
+.ds-card-wrap.ds-match .ds-card {
+  outline: 2px solid rgba(59, 130, 246, 0.8);
+  outline-offset: 2px;
+}
+
+.ds-card-wrap.ds-chosen .ds-card {
+  outline: 2px solid rgba(34, 197, 94, 0.75);
+  outline-offset: 2px;
+}
+
+.ds-card .ds-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(148, 163, 184, 0.12);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ds-card .ds-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ds-card .ds-name {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ds-card .ds-meta {
+  font-size: 11px;
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ds-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  display: inline-block;
+}
+.ds-dot.running { background: #22c55e; }
+.ds-dot.stopped { background: #ef4444; }
+
+.ds-index {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 10px;
+  opacity: 0.65;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+.ds-card-wrap {
+  position: relative;
+}
+]]></INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/js/docker-sorter.js" Mode="0644">
+<INLINE><![CDATA[
+(function () {
+  "use strict";
+
+  const apiBase = window.DockerSorter?.apiBase;
+  const saveEndpoint = window.DockerSorter?.saveEndpoint;
+  const csrfToken = window.DockerSorter?.csrfToken || "";
+
+  const gridEl = document.getElementById("ds-grid");
+  const messageEl = document.getElementById("ds-message");
+  const columnsEl = document.getElementById("ds-columns");
+  const columnsValueEl = document.getElementById("ds-columns-value");
+  const searchEl = document.getElementById("ds-search");
+  const reloadEl = document.getElementById("ds-reload");
+  const saveEl = document.getElementById("ds-save");
+  const rollbackEl = document.getElementById("ds-rollback");
+
+  let containersByName = new Map();
+  let lastSavedOrder = [];
+  let currentColumns = 6;
+  let sortable = null;
+
+  function showMessage(text, type) {
+    messageEl.style.display = "block";
+    messageEl.textContent = text;
+    messageEl.style.borderColor =
+      type === "error"
+        ? "rgba(239, 68, 68, 0.6)"
+        : type === "ok"
+          ? "rgba(34, 197, 94, 0.6)"
+          : "rgba(148, 163, 184, 0.35)";
+  }
+
+  function clearMessage() {
+    messageEl.style.display = "none";
+    messageEl.textContent = "";
+  }
+
+  function clampColumns(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue)) return 6;
+    return Math.min(7, Math.max(5, numberValue));
+  }
+
+  async function apiGet(action) {
+    const response = await fetch(`${apiBase}?action=${encodeURIComponent(action)}`, {
+      credentials: "same-origin",
+      headers: { "Accept": "application/json" },
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  }
+
+  async function apiPost(action, payload) {
+    const response = await fetch(`${apiBase}?action=${encodeURIComponent(action)}`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+    if (!response.ok) throw new Error(await response.text());
+    return response.json();
+  }
+
+  function buildCard(container, index) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "ds-card-wrap";
+    wrapper.dataset.name = container.name;
+
+    const card = document.createElement("div");
+    card.className = "ds-card";
+
+    const indexEl = document.createElement("div");
+    indexEl.className = "ds-index";
+    indexEl.textContent = String(index + 1).padStart(2, "0");
+
+    const iconEl = document.createElement("div");
+    iconEl.className = "ds-icon";
+    const imgEl = document.createElement("img");
+    imgEl.alt = container.name;
+    imgEl.loading = "lazy";
+    imgEl.decoding = "async";
+    imgEl.src = container.icon || "/webGui/images/question.png";
+    imgEl.addEventListener("error", () => {
+      imgEl.src = "/webGui/images/question.png";
+    }, { once: true });
+    iconEl.appendChild(imgEl);
+
+    const nameEl = document.createElement("div");
+    nameEl.className = "ds-name";
+    nameEl.textContent = container.name;
+
+    const metaEl = document.createElement("div");
+    metaEl.className = "ds-meta";
+    const dotEl = document.createElement("span");
+    dotEl.className = `ds-dot ${container.running ? "running" : "stopped"}`;
+    const statusTextEl = document.createElement("span");
+    statusTextEl.textContent = container.running ? "已启动" : "已停止";
+    metaEl.appendChild(dotEl);
+    metaEl.appendChild(statusTextEl);
+
+    card.appendChild(iconEl);
+    card.appendChild(nameEl);
+    card.appendChild(document.createElement("div"));
+    card.appendChild(metaEl);
+
+    wrapper.appendChild(indexEl);
+    wrapper.appendChild(card);
+    return wrapper;
+  }
+
+  function getOrderFromGrid() {
+    return Array.from(gridEl.querySelectorAll(".ds-card-wrap")).map((el) => el.dataset.name);
+  }
+
+  function render(order) {
+    gridEl.innerHTML = "";
+    const finalOrder = order.filter((name) => containersByName.has(name));
+    const missing = Array.from(containersByName.keys()).filter((name) => !finalOrder.includes(name));
+    finalOrder.push(...missing);
+
+    finalOrder.forEach((name, index) => {
+      const container = containersByName.get(name);
+      if (!container) return;
+      gridEl.appendChild(buildCard(container, index));
+    });
+
+    applySearch(searchEl.value || "");
+    enableDrag();
+  }
+
+  function updateIndices() {
+    const cards = Array.from(gridEl.querySelectorAll(".ds-card-wrap"));
+    cards.forEach((cardEl, index) => {
+      const indexEl = cardEl.querySelector(".ds-index");
+      if (indexEl) indexEl.textContent = String(index + 1).padStart(2, "0");
+    });
+  }
+
+  function applyColumns(columns) {
+    currentColumns = clampColumns(columns);
+    columnsEl.value = String(currentColumns);
+    columnsValueEl.textContent = String(currentColumns);
+    gridEl.style.setProperty("--ds-cols", String(currentColumns));
+  }
+
+  function applySearch(query) {
+    const q = String(query || "").trim().toLowerCase();
+    const cards = Array.from(gridEl.querySelectorAll(".ds-card-wrap"));
+    cards.forEach((el) => {
+      const name = (el.dataset.name || "").toLowerCase();
+      const match = q.length === 0 ? true : name.includes(q);
+      el.classList.toggle("ds-dim", q.length > 0 && !match);
+      el.classList.toggle("ds-match", q.length > 0 && match);
+    });
+  }
+
+  function enableDrag() {
+    if (sortable) {
+      sortable.destroy();
+      sortable = null;
+    }
+    if (!window.Sortable) {
+      showMessage("拖拽库未加载（SortableJS）。请检查网络或稍后重试。", "error");
+      return;
+    }
+    sortable = new window.Sortable(gridEl, {
+      animation: 150,
+      draggable: ".ds-card-wrap",
+      ghostClass: "ds-chosen",
+      onEnd: function () {
+        updateIndices();
+      },
+    });
+  }
+
+  async function loadState() {
+    clearMessage();
+    showMessage("加载中…", "info");
+    const state = await apiGet("state");
+    containersByName = new Map(state.containers.map((c) => [c.name, c]));
+    lastSavedOrder = Array.isArray(state.order) ? state.order : [];
+    applyColumns(state.settings?.columns ?? 6);
+    render(lastSavedOrder);
+    showMessage("已加载。拖拽后点击“保存到 Docker 页”。", "ok");
+  }
+
+  async function saveSettings() {
+    try {
+      await apiPost("settings", { columns: currentColumns });
+    } catch (e) {
+      showMessage(`保存设置失败：${e.message || e}`, "error");
+    }
+  }
+
+  async function doSave() {
+    clearMessage();
+    const newOrder = getOrderFromGrid();
+    if (!csrfToken) {
+      showMessage("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。", "error");
+      return;
+    }
+    if (!saveEndpoint) {
+      showMessage("缺少保存端点（saveEndpoint）。", "error");
+      return;
+    }
+
+    try {
+      await apiPost("backup", { order: lastSavedOrder });
+    } catch (e) {
+      showMessage(`备份失败：${e.message || e}`, "error");
+      return;
+    }
+
+    const names = `${newOrder.join(";")};`;
+    const index = `${newOrder.map((_, i) => String(i)).join(";")};`;
+    const form = new URLSearchParams();
+    form.set("names", names);
+    form.set("index", index);
+    form.set("csrf_token", csrfToken);
+
+    showMessage("保存中…", "info");
+    const response = await fetch(saveEndpoint, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: form.toString(),
+    });
+    const responseText = await response.text();
+    if (!response.ok) {
+      showMessage(`保存失败：HTTP ${response.status}\n${responseText}`, "error");
+      return;
+    }
+
+    lastSavedOrder = newOrder;
+    showMessage("已保存。刷新 Docker 页即可看到新顺序。", "ok");
+  }
+
+  async function doRollback() {
+    clearMessage();
+    if (!csrfToken) {
+      showMessage("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。", "error");
+      return;
+    }
+    try {
+      const data = await apiGet("latestBackup");
+      const order = Array.isArray(data.order) ? data.order : null;
+      if (!order || order.length === 0) {
+        showMessage("没有可回滚的备份。", "info");
+        return;
+      }
+
+      const names = `${order.join(";")};`;
+      const index = `${order.map((_, i) => String(i)).join(";")};`;
+      const form = new URLSearchParams();
+      form.set("names", names);
+      form.set("index", index);
+      form.set("csrf_token", csrfToken);
+
+      showMessage("回滚中…", "info");
+      const response = await fetch(saveEndpoint, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+        body: form.toString(),
+      });
+      const responseText = await response.text();
+      if (!response.ok) {
+        showMessage(`回滚失败：HTTP ${response.status}\n${responseText}`, "error");
+        return;
+      }
+
+      lastSavedOrder = order;
+      render(order);
+      showMessage("已回滚。刷新 Docker 页即可看到回滚后的顺序。", "ok");
+    } catch (e) {
+      showMessage(`回滚失败：${e.message || e}`, "error");
+    }
+  }
+
+  columnsEl.addEventListener("input", () => {
+    applyColumns(columnsEl.value);
+  });
+  columnsEl.addEventListener("change", () => {
+    saveSettings();
+  });
+  searchEl.addEventListener("input", () => {
+    applySearch(searchEl.value || "");
+  });
+  reloadEl.addEventListener("click", () => {
+    loadState().catch((e) => showMessage(`加载失败：${e.message || e}`, "error"));
+  });
+  saveEl.addEventListener("click", () => {
+    doSave().catch((e) => showMessage(`保存失败：${e.message || e}`, "error"));
+  });
+  rollbackEl.addEventListener("click", () => {
+    doRollback().catch((e) => showMessage(`回滚失败：${e.message || e}`, "error"));
+  });
+
+  loadState().catch((e) => showMessage(`加载失败：${e.message || e}`, "error"));
+})();
+]]></INLINE>
+</FILE>
+
+<FILE Name="&emhttp;/include/api.php" Mode="0644">
+<INLINE><![CDATA[
+<?php
+declare(strict_types=1);
+
+header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+function json_out($data, int $status = 200): void {
+  http_response_code($status);
+  echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  exit;
+}
+
+function read_json_body(): array {
+  $raw = file_get_contents('php://input');
+  if ($raw === false || $raw === '') return [];
+  $decoded = json_decode($raw, true);
+  return is_array($decoded) ? $decoded : [];
+}
+
+function run_cmd_lines(string $cmd): array {
+  $out = [];
+  $rc = 0;
+  @exec($cmd . ' 2>/dev/null', $out, $rc);
+  if ($rc !== 0) return [];
+  return array_values(array_filter(array_map('trim', $out), fn($l) => $l !== ''));
+}
+
+function docker_container_names(): array {
+  return run_cmd_lines("docker ps -a --format '{{.Names}}'");
+}
+
+function docker_running_set(): array {
+  $names = run_cmd_lines("docker ps --format '{{.Names}}'");
+  $set = [];
+  foreach ($names as $n) $set[$n] = true;
+  return $set;
+}
+
+function template_icon_map(): array {
+  $dirs = [
+    '/boot/config/plugins/dockerMan/templates-user',
+    '/boot/config/plugins/dockerMan/templates',
+  ];
+
+  $map = [];
+  foreach ($dirs as $dir) {
+    if (!is_dir($dir)) continue;
+    foreach (glob($dir . '/*.xml') ?: [] as $file) {
+      $xml = @simplexml_load_file($file);
+      if (!$xml) continue;
+      $name = isset($xml->Name) ? (string)$xml->Name : '';
+      $icon = isset($xml->Icon) ? (string)$xml->Icon : '';
+      $name = trim($name);
+      $icon = trim($icon);
+      if ($name === '' || $icon === '') continue;
+      $map[$name] = $icon;
+    }
+  }
+
+  return $map;
+}
+
+function normalize_icon_url(string $icon): string {
+  $icon = trim($icon);
+  if ($icon === '') return '';
+  if (str_starts_with($icon, 'file://')) $icon = substr($icon, 7);
+
+  $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/plugins/dynamix.docker.manager/images/', $icon);
+  $icon = str_replace('/usr/local/emhttp/plugins/dynamix.docker.manager/images/', '/plugins/dynamix.docker.manager/images/', $icon);
+
+  return $icon;
+}
+
+function parse_userprefs_cfg(string $path): array {
+  if (!is_file($path)) return [];
+  $lines = @file($path, FILE_IGNORE_NEW_LINES);
+  if (!is_array($lines)) return [];
+  $values = [];
+  foreach ($lines as $line) {
+    if (preg_match('/^\s*\d+\s*=\s*"([^"]*)"/', $line, $m) !== 1) continue;
+    $values[] = $m[1];
+  }
+  return $values;
+}
+
+function best_guess_order(array $containerNames): array {
+  $set = array_fill_keys($containerNames, true);
+  $paths = run_cmd_lines('find /boot/config/plugins -maxdepth 6 -name userprefs.cfg');
+  $paths[] = '/boot/config/plugins/dockerMan/userprefs.cfg';
+
+  $best = [];
+  $bestScore = -1;
+  foreach (array_unique($paths) as $path) {
+    $raw = parse_userprefs_cfg($path);
+    if (!$raw) continue;
+    $filtered = [];
+    foreach ($raw as $name) {
+      if (!isset($set[$name])) continue;
+      if (in_array($name, $filtered, true)) continue;
+      $filtered[] = $name;
+    }
+    $score = count($filtered);
+    if ($score > $bestScore) {
+      $bestScore = $score;
+      $best = $filtered;
+    }
+  }
+
+  if ($bestScore <= 0) {
+    $sorted = $containerNames;
+    sort($sorted, SORT_NATURAL | SORT_FLAG_CASE);
+    return $sorted;
+  }
+
+  $missing = array_values(array_filter($containerNames, fn($n) => !in_array($n, $best, true)));
+  sort($missing, SORT_NATURAL | SORT_FLAG_CASE);
+  return array_merge($best, $missing);
+}
+
+function settings_path(): string {
+  return '/boot/config/plugins/docker.sorter/settings.json';
+}
+
+function load_settings(): array {
+  $path = settings_path();
+  if (!is_file($path)) return ['columns' => 6];
+  $raw = @file_get_contents($path);
+  if ($raw === false) return ['columns' => 6];
+  $decoded = json_decode($raw, true);
+  if (!is_array($decoded)) return ['columns' => 6];
+  $columns = isset($decoded['columns']) ? (int)$decoded['columns'] : 6;
+  $columns = max(5, min(7, $columns));
+  return ['columns' => $columns];
+}
+
+function save_settings(array $settings): bool {
+  $path = settings_path();
+  $dir = dirname($path);
+  if (!is_dir($dir)) @mkdir($dir, 0777, true);
+  $tmp = $path . '.tmp';
+  $payload = json_encode($settings, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  if ($payload === false) return false;
+  if (@file_put_contents($tmp, $payload) === false) return false;
+  return @rename($tmp, $path);
+}
+
+function backups_dir(): string {
+  return '/boot/config/plugins/docker.sorter/backups';
+}
+
+function write_latest_backup(array $order): bool {
+  $dir = backups_dir();
+  if (!is_dir($dir)) @mkdir($dir, 0777, true);
+
+  $payload = [
+    'ts' => time(),
+    'order' => array_values($order),
+  ];
+
+  $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  if ($json === false) return false;
+  $file = $dir . '/latest.json';
+  $tmp = $file . '.tmp';
+  if (@file_put_contents($tmp, $json) === false) return false;
+  return @rename($tmp, $file);
+}
+
+function read_latest_backup(): array {
+  $file = backups_dir() . '/latest.json';
+  if (!is_file($file)) return [];
+  $raw = @file_get_contents($file);
+  if ($raw === false) return [];
+  $decoded = json_decode($raw, true);
+  return is_array($decoded) ? $decoded : [];
+}
+
+$action = $_GET['action'] ?? '';
+
+if ($action === 'state') {
+  $containerNames = docker_container_names();
+  $running = docker_running_set();
+  $icons = template_icon_map();
+
+  $containers = [];
+  foreach ($containerNames as $name) {
+    $icon = $icons[$name] ?? '';
+    $containers[] = [
+      'name' => $name,
+      'running' => isset($running[$name]),
+      'icon' => normalize_icon_url($icon),
+    ];
+  }
+
+  $order = best_guess_order($containerNames);
+  $settings = load_settings();
+  json_out([
+    'containers' => $containers,
+    'order' => $order,
+    'settings' => $settings,
+  ]);
+}
+
+if ($action === 'settings') {
+  $body = read_json_body();
+  $columns = isset($body['columns']) ? (int)$body['columns'] : 6;
+  $columns = max(5, min(7, $columns));
+  $ok = save_settings(['columns' => $columns]);
+  if (!$ok) json_out(['ok' => false, 'error' => 'save_failed'], 500);
+  json_out(['ok' => true, 'columns' => $columns]);
+}
+
+if ($action === 'backup') {
+  $body = read_json_body();
+  $order = $body['order'] ?? null;
+  if (!is_array($order)) json_out(['ok' => false, 'error' => 'invalid_order'], 400);
+  $order = array_values(array_map('strval', $order));
+  $ok = write_latest_backup($order);
+  if (!$ok) json_out(['ok' => false, 'error' => 'write_failed'], 500);
+  json_out(['ok' => true]);
+}
+
+if ($action === 'latestBackup') {
+  $backup = read_latest_backup();
+  $order = $backup['order'] ?? [];
+  json_out([
+    'ok' => true,
+    'ts' => $backup['ts'] ?? null,
+    'order' => is_array($order) ? $order : [],
+  ]);
+}
+
+json_out(['ok' => false, 'error' => 'unknown_action'], 404);
+]]></INLINE>
+</FILE>
+
+<!-- Remove script -->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+rm -rf "&emhttp;"
+rm -rf "&plugin;"
+</INLINE>
+</FILE>
+
+</PLUGIN>

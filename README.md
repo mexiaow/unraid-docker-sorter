@@ -1,3 +1,34 @@
 # unraid-docker-sorter
 
+为 Unraid 7.2.3 的 Docker 页面提供一个“紧凑网格拖拽排序器”页面：在小卡片网格里拖拽排序，保存后复用官方 `UserPrefs.php` 写回 Docker 页顺序。
+
+## 安装（手动）
+
+1. 将 `docker.sorter.plg` 复制到 Unraid 的 U 盘路径：`/boot/config/plugins/docker.sorter.plg`
+2. 在 Unraid 终端执行：`installplg /boot/config/plugins/docker.sorter.plg`
+3. 打开 WebGUI：`Tools -> Docker Sorter`
+
+## 使用与验证
+
+1. 在 `Tools -> Docker Sorter` 拖拽任意两个容器改变顺序
+2. 点击 `保存到 Docker 页`
+3. 刷新 `Docker` 页面，顺序应与网格页一致
+
+## 故障排查
+
+- 拖拽不可用：本页依赖 `cdn.jsdelivr.net` 加载 `SortableJS`，请确认 Unraid 能访问外网或更换可用的 CDN
+- 图标不显示：优先读取 Unraid Docker 模板里的 `Icon` 字段，取不到会回落到默认图标
+
+## 卸载
+
+- 在 Unraid WebGUI：`Plugins -> Installed Plugins -> docker.sorter -> Remove`
+- 或删除：`/boot/config/plugins/docker.sorter.plg`，然后重启（插件将不再自动安装）
+
+## 说明
+
+- 保存顺序使用 Unraid DockerMan 的官方接口：`/plugins/dynamix.docker.manager/include/UserPrefs.php`
+- 拖拽使用 `SortableJS`（从 `cdn.jsdelivr.net` 加载）
+- 网格列数默认 6（可调 5–7）；顺序按“行优先：从左到右、从上到下”
+- 卡片显示：图标 + 名称 + 运行状态（绿=运行，红=停止）
+
 在此补充项目说明。
