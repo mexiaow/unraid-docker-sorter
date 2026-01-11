@@ -17,7 +17,7 @@
 ## 故障排查
 
 - 拖拽不可用：本页依赖 `cdn.jsdelivr.net` 加载 `SortableJS`，请确认 Unraid 能访问外网或更换可用的 CDN
-- 提示缺少 `csrf_token`：确认已登录 WebGUI；本插件会尝试从 `/webGui/include/Report.php?cmd=config` 自动获取 token，仍失败时请强制刷新页面后重试
+- 提示缺少 `csrf_token`：当前版本保存/回滚不再强制依赖 token；若仍提示，通常是浏览器缓存了旧版 JS，请强制刷新（Ctrl+F5）
 - 图标不显示：优先尝试 `/state/plugins/dynamix.docker.manager/images/NAME-icon.png`，取不到会回退模板 `Icon`，最终回退到插件内置占位图标（避免 404 刷屏）
 
 ## 卸载
