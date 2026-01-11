@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/refs/heads/main/&name;.plg">
-  <!ENTITY version "0.1.12">
+  <!ENTITY version "0.1.13">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.13
+- 修复：`csrf_token` 获取更稳（优先读取页面全局变量/隐藏字段，并在后端从 `/var/local/emhttp/var.ini` 兜底）
+
 ###0.1.12
 - 修复：Unraid webGUI 对 POST 强制 CSRF，`backup/saveOrder` 现在会自动携带 `csrf_token`（避免空响应与日志报错）
 
@@ -89,7 +92,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.12）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.13）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -116,7 +119,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.12"
+    build: "0.1.13"
   };
 </script>
 
@@ -427,6 +430,34 @@ Title="Docker Sorter"
   async function ensureCsrfToken() {
     if (csrfToken) return csrfToken;
 
+    const globalCandidates = [
+      window.csrf_token,
+      window.csrfToken,
+      window.CSRF_TOKEN,
+      window.top?.csrf_token,
+      window.parent?.csrf_token,
+    ];
+    for (const cand of globalCandidates) {
+      if (typeof cand === "string" && cand.trim()) {
+        csrfToken = cand.trim().toUpperCase();
+        return csrfToken;
+      }
+    }
+
+    const inputEl = document.querySelector('input[name="csrf_token"][value]');
+    if (inputEl && typeof inputEl.value === "string" && inputEl.value.trim()) {
+      csrfToken = inputEl.value.trim().toUpperCase();
+      return csrfToken;
+    }
+
+    const metaEl =
+      document.querySelector('meta[name="csrf_token"][content]') ||
+      document.querySelector('meta[name="csrf-token"][content]');
+    if (metaEl && typeof metaEl.content === "string" && metaEl.content.trim()) {
+      csrfToken = metaEl.content.trim().toUpperCase();
+      return csrfToken;
+    }
+
     const cookieMatch = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/i);
     if (cookieMatch && cookieMatch[1]) {
       csrfToken = decodeURIComponent(cookieMatch[1]).toUpperCase();
@@ -449,6 +480,7 @@ Title="Docker Sorter"
       const candidates = [
         /csrf_token=([0-9A-F]+)/i,
         /"csrf_token"\s*:\s*"([0-9A-F]+)"/i,
+        /name=["']csrf_token["']\s+value=["']([0-9A-F]+)["']/i,
         /csrf_token&amp;#x3D;([0-9A-F]+)/i,
       ];
       for (const rx of candidates) {
@@ -889,6 +921,14 @@ function csrf_token_value(): string {
   if (is_string($t) && $t !== '') return $t;
   $t = $_COOKIE['csrf_token'] ?? '';
   if (is_string($t) && $t !== '') return $t;
+  $varIni = '/var/local/emhttp/var.ini';
+  if (is_file($varIni)) {
+    $ini = @parse_ini_file($varIni, false, INI_SCANNER_RAW);
+    if (is_array($ini)) {
+      $v = $ini['csrf_token'] ?? '';
+      if (is_string($v) && $v !== '') return $v;
+    }
+  }
   return '';
 }
 
