@@ -5,8 +5,8 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.15">
+  <!ENTITY version "0.1.16">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg?version=&version;">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.16
+- 修复：`pluginURL` 自动带版本参数（避免 Raw 缓存导致升级后仍加载旧页面/旧 JS）
+
 ###0.1.15
 - 修复：更新源改为 `raw.githubusercontent.com/.../main/...`（避免 `refs/heads/main` 缓存导致“更新后 Tools 仍是旧版本”）
 
@@ -100,7 +103,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.15）</div>
+        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.16）</div>
       </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -127,7 +130,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.15"
+    build: "0.1.16"
   };
 </script>
 
