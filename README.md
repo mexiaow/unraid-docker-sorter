@@ -6,7 +6,7 @@
 
 在 Unraid WebGUI：`Plugins -> Install Plugin`，粘贴：
 
-`https://raw.githubusercontent.com/mexiaow/unraid-docker-sorter/refs/heads/main/docker.sorter.plg`
+`https://raw.githubusercontent.com/mexiaow/unraid-docker-sorter/main/docker.sorter.plg`
 
 ## 安装（手动）
 
