@@ -5,7 +5,7 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.18">
+  <!ENTITY version "0.1.19">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.19
+- 优化：顶部改为三行布局（按钮/列数在第1行，信息在第2行，搜索在第3行且更短）
+
 ###0.1.18
 - 优化：顶部布局（搜索左侧，列数+按钮右侧同一行）
 - 增强：列数范围改为 6~15，默认 8
@@ -111,15 +114,9 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.18）</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.19）</div>
     </div>
-  </div>
-
-  <div class="ds-toprow">
-    <div class="ds-toprow-left">
-      <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
-    </div>
-    <div class="ds-toprow-right">
+    <div class="ds-toolbar-right">
       <label class="ds-label">
         <span>每行列数</span>
         <input id="ds-columns" type="range" min="6" max="15" step="1" value="8" />
@@ -139,6 +136,10 @@ Title="Docker Sorter"
     <pre id="ds-debug" class="ds-debug"></pre>
   </details>
 
+  <div class="ds-search-row">
+    <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
+  </div>
+
   <div id="ds-grid" class="ds-grid" style="--ds-cols: 6;"></div>
 </div>
 
@@ -148,7 +149,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.18"
+    build: "0.1.19"
   };
 </script>
 
@@ -226,26 +227,8 @@ Title="Docker Sorter"
   justify-content: flex-end;
 }
 
-.ds-toprow {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.ds-toprow-left {
-  flex: 1 1 320px;
-  min-width: 260px;
-}
-
-.ds-toprow-right {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
+.ds-search-row {
+  margin: 0 0 12px;
 }
 
 .ds-label {
@@ -262,8 +245,7 @@ Title="Docker Sorter"
 }
 
 .ds-search {
-  min-width: 220px;
-  width: 260px;
+  width: clamp(220px, 30vw, 420px);
   max-width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
