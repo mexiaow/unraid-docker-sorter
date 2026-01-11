@@ -1,16 +1,24 @@
-<?xml version='1.0' standalone='yes'?>
+<?xml version="1.0" standalone="yes"?>
 <!DOCTYPE PLUGIN [
-  <!ENTITY name      "docker.sorter">
-  <!ENTITY author    "unraid-docker-sorter">
-  <!ENTITY version   "0.1.0">
-  <!ENTITY launch    "Tools/Docker Sorter">
-  <!ENTITY plugin    "/boot/config/plugins/&name;">
-  <!ENTITY emhttp    "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY name "docker.sorter">
+  <!ENTITY author "mexiaow">
+  <!ENTITY github "mexiaow/unraid-docker-sorter">
+  <!ENTITY launch "Tools/Docker Sorter">
+  <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
+  <!ENTITY version "0.1.1">
+  <!ENTITY plugin "/boot/config/plugins/&name;">
+  <!ENTITY emhttp "&plugdir;">
 ]>
 
-<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" min="7.2.3" icon="sort-amount-down">
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.1
+- 修复：自动获取 csrf_token（含 Report.php 回退）
+- 修复：按 DockerMan 实际顺序初始化（过滤 folder-*）
+- 修复：图标优先使用 /state/plugins/dynamix.docker.manager/images/NAME-icon.png
+
 ###0.1.0
 - 初版：网格拖拽排序 + 保存到 Docker 页顺序（复用 UserPrefs.php）
 </CHANGES>
