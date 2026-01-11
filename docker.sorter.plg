@@ -61,7 +61,8 @@ Title="Docker Sorter"
   window.DockerSorter = {
     apiBase: "/plugins/docker.sorter/include/api.php",
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
-    csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>"
+    csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
+    reportConfigUrl: "/webGui/include/Report.php?cmd=config"
   };
 </script>
 
@@ -276,7 +277,8 @@ Title="Docker Sorter"
 
   const apiBase = window.DockerSorter?.apiBase;
   const saveEndpoint = window.DockerSorter?.saveEndpoint;
-  const csrfToken = window.DockerSorter?.csrfToken || "";
+  let csrfToken = window.DockerSorter?.csrfToken || "";
+  const reportConfigUrl = window.DockerSorter?.reportConfigUrl;
 
   const gridEl = document.getElementById("ds-grid");
   const messageEl = document.getElementById("ds-message");
@@ -334,6 +336,32 @@ Title="Docker Sorter"
     return response.json();
   }
 
+  async function ensureCsrfToken() {
+    if (csrfToken) return csrfToken;
+
+    try {
+      const data = await apiGet("csrf");
+      if (data && typeof data.csrf_token === "string" && data.csrf_token) {
+        csrfToken = data.csrf_token;
+        return csrfToken;
+      }
+    } catch (_) {
+      // ignore
+    }
+
+    if (reportConfigUrl) {
+      const response = await fetch(reportConfigUrl, { credentials: "same-origin" });
+      const text = await response.text();
+      const m = text.match(/csrf_token=([0-9A-F]+)/i);
+      if (m && m[1]) {
+        csrfToken = m[1].toUpperCase();
+        return csrfToken;
+      }
+    }
+
+    return "";
+  }
+
   function buildCard(container, index) {
     const wrapper = document.createElement("div");
     wrapper.className = "ds-card-wrap";
@@ -352,10 +380,16 @@ Title="Docker Sorter"
     imgEl.alt = container.name;
     imgEl.loading = "lazy";
     imgEl.decoding = "async";
-    imgEl.src = container.icon || "/webGui/images/question.png";
+    const fallbackIcon = container.iconFallback || container.icon || "";
+    const primaryIcon = container.iconPrimary || fallbackIcon || "/webGui/images/question.png";
+    imgEl.src = primaryIcon;
     imgEl.addEventListener("error", () => {
+      if (fallbackIcon && imgEl.src !== fallbackIcon) {
+        imgEl.src = fallbackIcon;
+        return;
+      }
       imgEl.src = "/webGui/images/question.png";
-    }, { once: true });
+    });
     iconEl.appendChild(imgEl);
 
     const nameEl = document.createElement("div");
@@ -468,12 +502,13 @@ Title="Docker Sorter"
   async function doSave() {
     clearMessage();
     const newOrder = getOrderFromGrid();
-    if (!csrfToken) {
-      showMessage("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。", "error");
-      return;
-    }
     if (!saveEndpoint) {
       showMessage("缺少保存端点（saveEndpoint）。", "error");
+      return;
+    }
+    const token = await ensureCsrfToken();
+    if (!token) {
+      showMessage("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。", "error");
       return;
     }
 
@@ -489,7 +524,7 @@ Title="Docker Sorter"
     const form = new URLSearchParams();
     form.set("names", names);
     form.set("index", index);
-    form.set("csrf_token", csrfToken);
+    form.set("csrf_token", token);
 
     showMessage("保存中…", "info");
     const response = await fetch(saveEndpoint, {
@@ -510,7 +545,8 @@ Title="Docker Sorter"
 
   async function doRollback() {
     clearMessage();
-    if (!csrfToken) {
+    const token = await ensureCsrfToken();
+    if (!token) {
       showMessage("缺少 csrf_token（可能是登录状态异常）。请刷新页面后重试。", "error");
       return;
     }
@@ -527,7 +563,7 @@ Title="Docker Sorter"
       const form = new URLSearchParams();
       form.set("names", names);
       form.set("index", index);
-      form.set("csrf_token", csrfToken);
+      form.set("csrf_token", token);
 
       showMessage("回滚中…", "info");
       const response = await fetch(saveEndpoint, {
@@ -581,6 +617,8 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+
+@session_start();
 
 function json_out($data, int $status = 200): void {
   http_response_code($status);
@@ -643,10 +681,28 @@ function normalize_icon_url(string $icon): string {
   if ($icon === '') return '';
   if (str_starts_with($icon, 'file://')) $icon = substr($icon, 7);
 
-  $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/plugins/dynamix.docker.manager/images/', $icon);
-  $icon = str_replace('/usr/local/emhttp/plugins/dynamix.docker.manager/images/', '/plugins/dynamix.docker.manager/images/', $icon);
+  $icon = str_replace('/boot/config/plugins/dockerMan/images/', '/state/plugins/dynamix.docker.manager/images/', $icon);
+  $icon = str_replace('/usr/local/emhttp/plugins/dynamix.docker.manager/images/', '/state/plugins/dynamix.docker.manager/images/', $icon);
 
   return $icon;
+}
+
+function dockerMan_paths(): array {
+  $docroot = ($_SERVER['DOCUMENT_ROOT'] ?? '') ?: '/usr/local/emhttp';
+  $path = $docroot . '/plugins/dynamix.docker.manager/include/DockerClient.php';
+  if (is_file($path)) {
+    require_once $path;
+  }
+  $paths = $GLOBALS['dockerManPaths'] ?? null;
+  return is_array($paths) ? $paths : [];
+}
+
+function dockerMan_user_prefs_path(): string {
+  $paths = dockerMan_paths();
+  if (isset($paths['user-prefs']) && is_string($paths['user-prefs']) && $paths['user-prefs'] !== '') {
+    return $paths['user-prefs'];
+  }
+  return '/boot/config/plugins/dockerMan/userprefs.cfg';
 }
 
 function parse_userprefs_cfg(string $path): array {
@@ -661,38 +717,30 @@ function parse_userprefs_cfg(string $path): array {
   return $values;
 }
 
-function best_guess_order(array $containerNames): array {
+function order_from_dockerMan_user_prefs(array $containerNames): array {
   $set = array_fill_keys($containerNames, true);
-  $paths = run_cmd_lines('find /boot/config/plugins -maxdepth 6 -name userprefs.cfg');
-  $paths[] = '/boot/config/plugins/dockerMan/userprefs.cfg';
+  $path = dockerMan_user_prefs_path();
+  $raw = parse_userprefs_cfg($path);
 
-  $best = [];
-  $bestScore = -1;
-  foreach (array_unique($paths) as $path) {
-    $raw = parse_userprefs_cfg($path);
-    if (!$raw) continue;
-    $filtered = [];
-    foreach ($raw as $name) {
-      if (!isset($set[$name])) continue;
-      if (in_array($name, $filtered, true)) continue;
-      $filtered[] = $name;
-    }
-    $score = count($filtered);
-    if ($score > $bestScore) {
-      $bestScore = $score;
-      $best = $filtered;
-    }
+  $order = [];
+  foreach ($raw as $name) {
+    if ($name === '') continue;
+    if (str_starts_with($name, 'folder-')) continue;
+    if (!isset($set[$name])) continue;
+    if (in_array($name, $order, true)) continue;
+    $order[] = $name;
   }
 
-  if ($bestScore <= 0) {
-    $sorted = $containerNames;
-    sort($sorted, SORT_NATURAL | SORT_FLAG_CASE);
-    return $sorted;
-  }
+  $missing = array_values(array_filter($containerNames, fn($n) => !in_array($n, $order, true)));
+  return array_merge($order, $missing);
+}
 
-  $missing = array_values(array_filter($containerNames, fn($n) => !in_array($n, $best, true)));
-  sort($missing, SORT_NATURAL | SORT_FLAG_CASE);
-  return array_merge($best, $missing);
+function csrf_token_value(): string {
+  $t = $_SESSION['csrf_token'] ?? '';
+  if (is_string($t) && $t !== '') return $t;
+  $t = $_COOKIE['csrf_token'] ?? '';
+  if (is_string($t) && $t !== '') return $t;
+  return '';
 }
 
 function settings_path(): string {
@@ -754,10 +802,18 @@ function read_latest_backup(): array {
 
 $action = $_GET['action'] ?? '';
 
+if ($action === 'csrf') {
+  json_out([
+    'ok' => true,
+    'csrf_token' => csrf_token_value(),
+  ]);
+}
+
 if ($action === 'state') {
   $containerNames = docker_container_names();
   $running = docker_running_set();
   $icons = template_icon_map();
+  $ts = time();
 
   $containers = [];
   foreach ($containerNames as $name) {
@@ -765,11 +821,12 @@ if ($action === 'state') {
     $containers[] = [
       'name' => $name,
       'running' => isset($running[$name]),
-      'icon' => normalize_icon_url($icon),
+      'iconPrimary' => '/state/plugins/dynamix.docker.manager/images/' . rawurlencode($name) . '-icon.png?' . $ts,
+      'iconFallback' => normalize_icon_url($icon),
     ];
   }
 
-  $order = best_guess_order($containerNames);
+  $order = order_from_dockerMan_user_prefs($containerNames);
   $settings = load_settings();
   json_out([
     'containers' => $containers,
