@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.4">
+  <!ENTITY version "0.1.5">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.5
+- 修复：api.php 发生 PHP 致命错误时仍返回 JSON（避免前端出现 “Unexpected end of JSON input”）
+
 ###0.1.4
 - 修复：备份接口返回非 JSON 时不阻断保存（并输出更清晰错误信息）
 - 修复：前端 API 响应解析更健壮（避免 “Unexpected end of JSON input” 直接中断）
@@ -680,6 +683,27 @@ header('Content-Type: application/json; charset=utf-8');
 header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
 
 @session_start();
+
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
+function fatal_json_shutdown(): void {
+  $err = error_get_last();
+  if (!$err) return;
+  $fatalTypes = [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR];
+  if (!in_array($err['type'], $fatalTypes, true)) return;
+  if (headers_sent()) return;
+  http_response_code(500);
+  header('Content-Type: application/json; charset=utf-8');
+  echo json_encode([
+    'ok' => false,
+    'error' => 'fatal',
+    'message' => $err['message'] ?? '',
+    'file' => $err['file'] ?? '',
+    'line' => $err['line'] ?? 0,
+  ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+}
+register_shutdown_function('fatal_json_shutdown');
 
 function json_out($data, int $status = 200): void {
   http_response_code($status);
