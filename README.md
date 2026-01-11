@@ -2,6 +2,12 @@
 
 为 Unraid 的 Docker 页面提供一个“紧凑网格拖拽排序器”页面：在小卡片网格里拖拽排序，保存后复用官方 `UserPrefs.php` 写回 Docker 页顺序。
 
+## 安装（URL）
+
+在 Unraid WebGUI：`Plugins -> Install Plugin`，粘贴：
+
+`https://raw.githubusercontent.com/mexiaow/unraid-docker-sorter/refs/heads/main/docker.sorter.plg`
+
 ## 安装（手动）
 
 1. 将 `docker.sorter.plg` 复制到 Unraid 的 U 盘路径：`/boot/config/plugins/docker.sorter.plg`
