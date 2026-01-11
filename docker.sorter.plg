@@ -5,7 +5,7 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.16">
+  <!ENTITY version "0.1.17">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg?version=&version;">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.17
+- 优化：顶部工具栏重新布局（列数/搜索/按钮更紧凑，调试信息可折叠）
+
 ###0.1.16
 - 修复：`pluginURL` 自动带版本参数（避免 Raw 缓存导致升级后仍加载旧页面/旧 JS）
 
@@ -103,23 +106,30 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-        <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.16）</div>
-      </div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.17）</div>
+    </div>
     <div class="ds-toolbar-right">
-      <label class="ds-label">
-        <span>每行列数</span>
-        <input id="ds-columns" type="range" min="5" max="7" step="1" value="6" />
-        <span id="ds-columns-value" class="ds-mono">6</span>
-      </label>
-      <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
-      <button id="ds-reload" class="ds-btn">刷新</button>
-      <button id="ds-rollback" class="ds-btn ds-btn-secondary">回滚上次</button>
-      <button id="ds-save" class="ds-btn ds-btn-primary">保存到 Docker 页</button>
+      <div class="ds-controls">
+        <label class="ds-label">
+          <span>每行列数</span>
+          <input id="ds-columns" type="range" min="5" max="7" step="1" value="6" />
+          <span id="ds-columns-value" class="ds-mono">6</span>
+        </label>
+        <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
+      </div>
+      <div class="ds-actions">
+        <button id="ds-reload" class="ds-btn">刷新</button>
+        <button id="ds-rollback" class="ds-btn ds-btn-secondary">回滚上次</button>
+        <button id="ds-save" class="ds-btn ds-btn-primary">保存到 Docker 页</button>
+      </div>
     </div>
   </div>
 
   <div id="ds-message" class="ds-message" style="display:none;"></div>
-  <div id="ds-debug" class="ds-message ds-debug" style="display:none;"></div>
+  <details id="ds-debug-details" class="ds-debug-details" style="display:none;">
+    <summary id="ds-debug-summary">详情</summary>
+    <pre id="ds-debug" class="ds-debug"></pre>
+  </details>
 
   <div id="ds-grid" class="ds-grid" style="--ds-cols: 6;"></div>
 </div>
@@ -130,7 +140,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.16"
+    build: "0.1.17"
   };
 </script>
 
@@ -171,14 +181,15 @@ Title="Docker Sorter"
 .ds-toolbar {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 12px;
 }
 
 .ds-toolbar-left {
-  min-width: 260px;
+  min-width: 220px;
+  padding-top: 2px;
 }
 
 .ds-title {
@@ -193,9 +204,26 @@ Title="Docker Sorter"
 
 .ds-toolbar-right {
   display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ds-controls {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.ds-actions {
+  display: flex;
   gap: 8px;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
 }
 
 .ds-label {
@@ -213,6 +241,8 @@ Title="Docker Sorter"
 
 .ds-search {
   min-width: 220px;
+  width: 260px;
+  max-width: 100%;
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid rgba(148, 163, 184, 0.35);
@@ -247,7 +277,28 @@ Title="Docker Sorter"
   margin: 8px 0 12px;
 }
 
+.ds-debug-details {
+  border-radius: 10px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.25);
+  margin: 0 0 12px;
+}
+
+.ds-debug-details > summary {
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.ds-debug-details[open] > summary {
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
 .ds-debug {
+  margin: 0;
+  padding: 10px 12px;
   white-space: pre-wrap;
   font-size: 12px;
   opacity: 0.9;
@@ -358,6 +409,8 @@ Title="Docker Sorter"
   const gridEl = document.getElementById("ds-grid");
   const messageEl = document.getElementById("ds-message");
   const debugEl = document.getElementById("ds-debug");
+  const debugDetailsEl = document.getElementById("ds-debug-details");
+  const debugSummaryEl = document.getElementById("ds-debug-summary");
   const columnsEl = document.getElementById("ds-columns");
   const columnsValueEl = document.getElementById("ds-columns-value");
   const searchEl = document.getElementById("ds-search");
@@ -387,14 +440,18 @@ Title="Docker Sorter"
   }
 
   function setDebug(text) {
-    if (!debugEl) return;
+    if (!debugEl || !debugDetailsEl) return;
     if (!text) {
-      debugEl.style.display = "none";
+      debugDetailsEl.style.display = "none";
+      debugDetailsEl.open = false;
       debugEl.textContent = "";
+      if (debugSummaryEl) debugSummaryEl.textContent = "详情";
       return;
     }
-    debugEl.style.display = "block";
+    debugDetailsEl.style.display = "block";
     debugEl.textContent = text;
+    const firstLine = String(text).split(/\r?\n/)[0]?.trim() || "";
+    if (debugSummaryEl) debugSummaryEl.textContent = firstLine || "详情";
   }
 
   function clampColumns(value) {
