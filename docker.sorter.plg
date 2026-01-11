@@ -6,7 +6,7 @@
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
-  <!ENTITY version "0.1.3">
+  <!ENTITY version "0.1.4">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
 ]>
@@ -14,6 +14,10 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.4
+- 修复：备份接口返回非 JSON 时不阻断保存（并输出更清晰错误信息）
+- 修复：前端 API 响应解析更健壮（避免 “Unexpected end of JSON input” 直接中断）
+
 ###0.1.3
 - 修复：保存/回滚不再强制要求 csrf_token（UserPrefs.php 实际不校验）
 - 修复：静态资源增加 cache-bust，避免浏览器继续用旧版 JS/CSS 导致 404 刷屏
@@ -357,8 +361,14 @@ Title="Docker Sorter"
       credentials: "same-origin",
       headers: { "Accept": "application/json" },
     });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
+    const text = await response.text();
+    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error(`API 返回非 JSON：${String(e?.message || e)}\n${text.slice(0, 300)}`);
+    }
   }
 
   async function apiPost(action, payload) {
@@ -368,8 +378,14 @@ Title="Docker Sorter"
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(payload || {}),
     });
-    if (!response.ok) throw new Error(await response.text());
-    return response.json();
+    const text = await response.text();
+    if (!response.ok) throw new Error(text || `HTTP ${response.status}`);
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      throw new Error(`API 返回非 JSON：${String(e?.message || e)}\n${text.slice(0, 300)}`);
+    }
   }
 
   async function ensureCsrfToken() {
@@ -565,8 +581,7 @@ Title="Docker Sorter"
     try {
       await apiPost("backup", { order: lastSavedOrder });
     } catch (e) {
-      showMessage(`备份失败：${e.message || e}`, "error");
-      return;
+      showMessage(`备份失败（不影响保存）：${e.message || e}`, "error");
     }
 
     const names = `${newOrder.join(";")};`;

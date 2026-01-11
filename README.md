@@ -18,6 +18,7 @@
 
 - 拖拽不可用：本页依赖 `cdn.jsdelivr.net` 加载 `SortableJS`，请确认 Unraid 能访问外网或更换可用的 CDN
 - 提示缺少 `csrf_token`：当前版本保存/回滚不再强制依赖 token；若仍提示，通常是浏览器缓存了旧版 JS，请强制刷新（Ctrl+F5）
+- 备份失败但仍可保存：备份为“尽力而为”，不影响顺序保存；请把报错信息里的响应内容贴出来以便定位
 - 图标不显示：优先尝试 `/state/plugins/dynamix.docker.manager/images/NAME-icon.png`，取不到会回退模板 `Icon`，最终回退到插件内置占位图标（避免 404 刷屏）
 
 ## 卸载
