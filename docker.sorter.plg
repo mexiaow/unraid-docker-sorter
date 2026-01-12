@@ -5,7 +5,7 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.19">
+  <!ENTITY version "0.1.20">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.20
+- 新增：导出/导入顺序（导出为本地 JSON 文件；导入支持 JSON 与 userprefs.cfg 文本）
+
 ###0.1.19
 - 优化：顶部改为三行布局（按钮/列数在第1行，信息在第2行，搜索在第3行且更短）
 
@@ -114,7 +117,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.19）</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.20）</div>
     </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -124,6 +127,8 @@ Title="Docker Sorter"
       </label>
       <div class="ds-actions">
         <button id="ds-reload" class="ds-btn">刷新</button>
+        <button id="ds-export" class="ds-btn">导出</button>
+        <button id="ds-import" class="ds-btn">导入</button>
         <button id="ds-rollback" class="ds-btn ds-btn-secondary">回滚上次</button>
         <button id="ds-save" class="ds-btn ds-btn-primary">保存到 Docker 页</button>
       </div>
@@ -140,6 +145,8 @@ Title="Docker Sorter"
     <input id="ds-search" class="ds-search" type="text" placeholder="搜索（命中高亮，其他变暗）" />
   </div>
 
+  <input id="ds-import-file" type="file" accept=".json,.cfg,.txt" style="display:none;" />
+
   <div id="ds-grid" class="ds-grid" style="--ds-cols: 6;"></div>
 </div>
 
@@ -149,7 +156,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.19"
+    build: "0.1.20"
   };
 </script>
 
@@ -419,6 +426,9 @@ Title="Docker Sorter"
   const columnsValueEl = document.getElementById("ds-columns-value");
   const searchEl = document.getElementById("ds-search");
   const reloadEl = document.getElementById("ds-reload");
+  const exportEl = document.getElementById("ds-export");
+  const importEl = document.getElementById("ds-import");
+  const importFileEl = document.getElementById("ds-import-file");
   const saveEl = document.getElementById("ds-save");
   const rollbackEl = document.getElementById("ds-rollback");
 
@@ -639,6 +649,111 @@ Title="Docker Sorter"
     return Array.from(gridEl.querySelectorAll(".ds-card-wrap")).map((el) => el.dataset.name);
   }
 
+  function normalizeImportedOrder(order) {
+    if (!Array.isArray(order)) return [];
+    const out = [];
+    const seen = new Set();
+    for (const raw of order) {
+      const name = String(raw || "").trim();
+      if (!name) continue;
+      if (name.startsWith("folder-")) continue;
+      if (seen.has(name)) continue;
+      seen.add(name);
+      out.push(name);
+    }
+    return out;
+  }
+
+  function parseOrderFromText(text) {
+    const rawText = String(text || "");
+    const trimmed = rawText.trim();
+    if (!trimmed) return [];
+
+    // JSON: { order: [...] } or [ ... ]
+    if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      try {
+        const json = JSON.parse(trimmed);
+        if (Array.isArray(json)) return normalizeImportedOrder(json);
+        if (json && Array.isArray(json.order)) return normalizeImportedOrder(json.order);
+      } catch (_) {
+        // fall through
+      }
+    }
+
+    // dockerMan userprefs.cfg lines: 0="name"
+    const cfgMatches = [];
+    const cfgRx = /^\s*\d+\s*=\s*"([^"]*)"/gm;
+    let m;
+    while ((m = cfgRx.exec(rawText))) {
+      if (m[1]) cfgMatches.push(m[1]);
+    }
+    if (cfgMatches.length > 0) return normalizeImportedOrder(cfgMatches);
+
+    // Form dump: names: a;b;c;
+    const namesLine = rawText.match(/^\s*names:\s*([^\r\n]+)\s*$/im);
+    if (namesLine && namesLine[1]) {
+      const names = namesLine[1]
+        .split(";")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      if (names.length > 0) return normalizeImportedOrder(names);
+    }
+
+    // Fallback: split by newline / comma / semicolon
+    const parts = rawText
+      .split(/[\r\n,;]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return normalizeImportedOrder(parts);
+  }
+
+  function downloadText(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  }
+
+  function formatTimestampForFilename(date) {
+    const d = date instanceof Date ? date : new Date();
+    const pad2 = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}-${pad2(d.getHours())}${pad2(d.getMinutes())}${pad2(d.getSeconds())}`;
+  }
+
+  function doExport() {
+    const order = getOrderFromGrid();
+    const payload = {
+      schema: 1,
+      exportedAt: new Date().toISOString(),
+      columns: currentColumns,
+      order,
+    };
+    const filename = `docker-sorter-order-${formatTimestampForFilename(new Date())}.json`;
+    downloadText(filename, JSON.stringify(payload, null, 2), "application/json; charset=utf-8");
+    showMessage("已导出到本地文件。", "ok");
+  }
+
+  async function doImportFromFile(file) {
+    if (!file) return;
+    const text = await file.text();
+    const parsed = parseOrderFromText(text);
+    if (!parsed || parsed.length === 0) {
+      showMessage("导入失败：文件里没有识别到顺序（支持 JSON 或 userprefs.cfg 格式）。", "error");
+      return;
+    }
+    if (containersByName.size === 0) {
+      await loadState();
+    }
+    render(parsed);
+    updateIndices();
+    showMessage("已导入。请检查顺序后点击“保存到 Docker 页”。", "ok");
+  }
+
   function render(order) {
     gridEl.innerHTML = "";
     const finalOrder = order.filter((name) => containersByName.has(name));
@@ -801,6 +916,31 @@ Title="Docker Sorter"
   });
   rollbackEl.addEventListener("click", () => {
     doRollback().catch((e) => showMessage(`回滚失败：${e.message || e}`, "error"));
+  });
+
+  exportEl?.addEventListener("click", () => {
+    clearMessage();
+    try {
+      doExport();
+    } catch (e) {
+      showMessage(`导出失败：${e?.message || e}`, "error");
+    }
+  });
+
+  importEl?.addEventListener("click", () => {
+    clearMessage();
+    if (!importFileEl) {
+      showMessage("导入不可用：缺少文件选择控件。", "error");
+      return;
+    }
+    importFileEl.value = "";
+    importFileEl.click();
+  });
+
+  importFileEl?.addEventListener("change", () => {
+    const file = importFileEl.files && importFileEl.files[0] ? importFileEl.files[0] : null;
+    if (!file) return;
+    doImportFromFile(file).catch((e) => showMessage(`导入失败：${e?.message || e}`, "error"));
   });
 
   loadState().catch((e) => showMessage(`加载失败：${e.message || e}`, "error"));

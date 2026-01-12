@@ -19,6 +19,7 @@
 1. 在 `Tools -> Docker Sorter` 拖拽任意两个容器改变顺序
 2. 点击 `保存到 Docker 页`
 3. 刷新 `Docker` 页面，顺序应与网格页一致
+4. （可选）点击 `导出` 备份为本地 JSON；点击 `导入` 可从 JSON 或 `userprefs.cfg` 文本恢复
 
 ## 故障排查
 
