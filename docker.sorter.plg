@@ -5,7 +5,7 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.20">
+  <!ENTITY version "0.1.21">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
@@ -14,6 +14,9 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
+###0.1.21
+- 修复：更新插件时强制重写 Tools 页面文件（将关键 `<FILE>` 标记为 `Method="install"`，避免只更新 U 盘 `.plg` 但 `/usr/local/...` 仍是旧版）
+
 ###0.1.20
 - 新增：导出/导入顺序（导出为本地 JSON 文件；导入支持 JSON 与 userprefs.cfg 文本）
 
@@ -91,14 +94,14 @@
 </CHANGES>
 
 <!-- Post-install: create persistent config dirs -->
-<FILE Run="/bin/bash">
+<FILE Run="/bin/bash" Method="install">
 <INLINE>
 mkdir -p "&plugin;/backups"
 mkdir -p "&emhttp;/images" "&emhttp;/css" "&emhttp;/js" "&emhttp;/include"
 </INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/DockerSorter.page" Mode="0644">
+<FILE Name="&emhttp;/DockerSorter.page" Mode="0644" Method="install">
 <INLINE><![CDATA[
 Icon="docker-sorter.svg"
 Menu="Tools"
@@ -117,7 +120,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.20）</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.21）</div>
     </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -156,7 +159,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.20"
+    build: "0.1.21"
   };
 </script>
 
@@ -166,7 +169,7 @@ Title="Docker Sorter"
 ]]></INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/docker-sorter.svg" Mode="0644">
+<FILE Name="&emhttp;/docker-sorter.svg" Mode="0644" Method="install">
 <INLINE><![CDATA[
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <defs>
@@ -188,7 +191,7 @@ Title="Docker Sorter"
 ]]></INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/css/docker-sorter.css" Mode="0644">
+<FILE Name="&emhttp;/css/docker-sorter.css" Mode="0644" Method="install">
 <INLINE><![CDATA[
 .ds-root {
   padding: 14px 10px 10px;
@@ -406,7 +409,7 @@ Title="Docker Sorter"
 ]]></INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/js/docker-sorter.js" Mode="0644">
+<FILE Name="&emhttp;/js/docker-sorter.js" Mode="0644" Method="install">
 <INLINE><![CDATA[
 (function () {
   "use strict";
@@ -948,7 +951,7 @@ Title="Docker Sorter"
 ]]></INLINE>
 </FILE>
 
-<FILE Name="&emhttp;/include/api.php" Mode="0644">
+<FILE Name="&emhttp;/include/api.php" Mode="0644" Method="install">
 <INLINE><![CDATA[
 <?php
 declare(strict_types=1);
