@@ -5,7 +5,7 @@
   <!ENTITY github "mexiaow/unraid-docker-sorter">
   <!ENTITY launch "Tools/Docker Sorter">
   <!ENTITY plugdir "/usr/local/emhttp/plugins/&name;">
-  <!ENTITY version "0.1.22">
+  <!ENTITY version "2026.01.12">
   <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/&name;.plg">
   <!ENTITY plugin "/boot/config/plugins/&name;">
   <!ENTITY emhttp "&plugdir;">
@@ -14,7 +14,7 @@
 <PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" icon="sort-amount-down" min="7.2.3" support="https://github.com/&github;">
 
 <CHANGES>
-###0.1.22
+###2026.01.12
 - 修复：插件更新报 “xml parse error”（`CHANGES` 文本里的 `&lt;FILE&gt;` 已转义，避免 XML 解析失败）
 - 修复：更新插件时强制重写 Tools 页面文件（将关键 `&lt;FILE&gt;` 标记为 `Method="install"`，避免只更新 U 盘 `.plg` 但 `/usr/local/...` 仍是旧版）
 
@@ -121,7 +121,7 @@ Title="Docker Sorter"
   <div class="ds-toolbar">
     <div class="ds-toolbar-left">
       <div class="ds-title">Docker Sorter</div>
-      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v0.1.22）</div>
+      <div class="ds-subtitle">网格拖拽排序，保存后同步到 Docker 页面（v2026.01.12）</div>
     </div>
     <div class="ds-toolbar-right">
       <label class="ds-label">
@@ -160,7 +160,7 @@ Title="Docker Sorter"
     saveEndpoint: "/plugins/dynamix.docker.manager/include/UserPrefs.php",
     csrfToken: "<?=htmlspecialchars($token, ENT_QUOTES)?>",
     reportConfigUrl: "/webGui/include/Report.php?cmd=config",
-    build: "0.1.22"
+    build: "2026.01.12"
   };
 </script>
 
